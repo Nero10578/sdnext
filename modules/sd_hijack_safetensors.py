@@ -9,9 +9,9 @@ orig_load_file = safetensors.torch.load_file
 orig_load_state_dict = transformers.modeling_utils.load_state_dict
 
 
-def hijacked_load_file(checkpoint_file, device="cpu"):
+def hijacked_load_file(checkpoint_file, device="cpu", **kwargs):
     if not checkpoint_file.endswith('.safetensors'):
-        return orig_load_file(checkpoint_file, device=device)
+        return orig_load_file(checkpoint_file, device=device, **kwargs)
 
     install('runai_model_streamer>=0.15.1')
     state_dict = {}
@@ -27,9 +27,9 @@ def hijacked_load_file(checkpoint_file, device="cpu"):
     return state_dict
 
 
-def hijacked_load_state_dict(checkpoint_file, is_quantized: bool = False, map_location: str = "cpu", weights_only: bool = True):
+def hijacked_load_state_dict(checkpoint_file, is_quantized: bool = False, map_location: str = "cpu", weights_only: bool = True, **kwargs):
     if not checkpoint_file.endswith(".safetensors"):
-        return orig_load_state_dict(checkpoint_file=checkpoint_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only)
+        return orig_load_state_dict(checkpoint_file=checkpoint_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only, **kwargs)
 
     install('runai_model_streamer>=0.15.1')
     state_dict = {}
