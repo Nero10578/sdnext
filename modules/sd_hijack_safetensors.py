@@ -29,7 +29,10 @@ def hijacked_load_file(checkpoint_file, device="cpu", **kwargs):
 
 def hijacked_load_state_dict(checkpoint_file, is_quantized: bool = False, map_location: str = "cpu", weights_only: bool = True, **kwargs):
     if not checkpoint_file.endswith(".safetensors"):
-        return orig_load_state_dict(checkpoint_file=checkpoint_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only, **kwargs)
+        # Newer transformers dropped the legacy args and instead pass forward-compatible
+        # kwargs (e.g. `disable_mmap`). Forward exactly what the caller sent so we stay
+        # in sync with the installed transformers API.
+        return orig_load_state_dict(checkpoint_file, **kwargs)
 
     install('runai_model_streamer>=0.15.1')
     state_dict = {}
