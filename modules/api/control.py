@@ -61,7 +61,6 @@ ReqControl = models.create_model_from_signature(
         {"key": "xyz", "type": Optional[ItemXYZ], "default": None, "exclude": True},
         {"key": "extra", "type": Optional[dict], "default": {}, "exclude": True},
         {"key": "init_control", "type": Optional[list], "default": None, "exclude": True},
-        {"key": "sd_model_checkpoint", "type": Optional[str], "default": None},
     ]
 )
 if not hasattr(ReqControl, "__config__"):
@@ -89,7 +88,6 @@ class APIControl:
         args.pop('face_id', None)
         args.pop('xyz', None)  # not a control_run() kwarg; consumed by prepare_xyz_grid only when set
         args.pop('ip_adapter', None)
-        args.pop('sd_model_checkpoint', None)  # handled in post_control, not a control_run() kwarg
         args.pop('save_images', None)
         args.pop('init_control', None)
         args.pop('mask_blur', None)
@@ -249,16 +247,9 @@ class APIControl:
         self.prepare_control(req)
         self.prepare_xyz_grid(req)
 
-        # Honor the requested checkpoint the same way txt2img/img2img do
-        # (control_run has no sd_model_checkpoint parameter, so without this the
-        # request silently ran with whatever checkpoint was already loaded).
-        if req.sd_model_checkpoint and len(req.sd_model_checkpoint) > 0:
-            from modules import sd_checkpoint, sd_models
-            if sd_checkpoint.select_checkpoint(op='model', sd_model_checkpoint=req.sd_model_checkpoint) is not None:
-                shared.opts.sd_model_checkpoint = req.sd_model_checkpoint
-                sd_models.reload_model_weights()
-            else:
-                raise HTTPException(status_code=400, detail=f'Checkpoint not found: "{req.sd_model_checkpoint}"')
+        # sd_model_checkpoint flows through control_run(**args) into the
+        # StableDiffusionProcessingControl constructor, which switches the loaded
+        # checkpoint the same way txt2img/img2img do (select_checkpoint + reload).
 
         # Fail loudly instead of silently generating without control guidance
         # (which yields black/dark output when the unit's model failed to load).

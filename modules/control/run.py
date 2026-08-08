@@ -366,6 +366,7 @@ def control_run(state: str = '', # pylint: disable=keyword-arg-before-vararg
                 hr_scale: float = 1.0, hr_resize_x: int = 0, hr_resize_y: int = 0, refiner_steps: int = 5, refiner_start: float = 0.0, refiner_prompt: str = '', refiner_negative: str = '',
                 video_skip_frames: int = 0, video_type: str = 'None', video_duration: float = 2.0, video_loop: bool = False, video_pad: int = 0, video_interpolate: int = 0,
                 override_script_name: str | None = None, override_script_args = None, extra: dict | None = None,
+                sd_model_checkpoint: str | None = None,
                 *input_script_args,
                 # API-only params (keyword-only, not wired to Gradio)
                 detailer_segmentation: bool | None = None, detailer_include_detections: bool | None = None, detailer_merge: bool | None = None, detailer_sort: bool | None = None, detailer_classes: str | None = None,
@@ -593,7 +594,8 @@ def control_run(state: str = '', # pylint: disable=keyword-arg-before-vararg
         lora_force_reload=lora_force_reload, extra_networks_default_multiplier=extra_networks_default_multiplier,
         lora_apply_tags=lora_apply_tags,
         # overrides
-        override_settings=extra
+        override_settings=extra,
+        sd_model_checkpoint=sd_model_checkpoint
     )
 
     p.state = state
