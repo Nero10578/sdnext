@@ -1,6 +1,7 @@
 from typing import Optional
 from threading import Lock
 from pydantic import BaseModel, Field # pylint: disable=no-name-in-module
+from fastapi import HTTPException
 from modules import errors, shared, processing_helpers
 from modules.logger import log
 from modules.api import models, helpers
@@ -245,6 +246,18 @@ class APIControl:
         self.prepare_face_module(req)
         self.prepare_control(req)
         self.prepare_xyz_grid(req)
+
+        # Fail loudly instead of silently generating without control guidance
+        # (which yields black/dark output when the unit's model failed to load).
+        for u in req.units:
+            if not u.enabled or u.type not in ('controlnet', 'xs', 'lite', 't2i adapter'):
+                continue
+            model_id = u.model_id
+            if not model_id or model_id in ('None', ''):
+                continue
+            holder = u.adapter if u.type == 't2i adapter' else u.controlnet
+            if holder is None or holder.model is None:
+                raise HTTPException(status_code=400, detail=f'Control model could not be loaded: "{model_id}". Check the SDNext log for the underlying load error (unknown model id or download/load failure) or pick another model.')
 
         # Merge init_control images into inits
         init_control = getattr(req, "init_control", None)
