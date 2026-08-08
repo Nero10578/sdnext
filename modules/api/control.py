@@ -89,6 +89,7 @@ class APIControl:
         args.pop('face_id', None)
         args.pop('xyz', None)  # not a control_run() kwarg; consumed by prepare_xyz_grid only when set
         args.pop('ip_adapter', None)
+        args.pop('sd_model_checkpoint', None)  # handled in post_control, not a control_run() kwarg
         args.pop('save_images', None)
         args.pop('init_control', None)
         args.pop('mask_blur', None)
