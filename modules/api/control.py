@@ -308,7 +308,12 @@ class APIControl:
             for item in res:
                 if len(item) > 0 and (isinstance(item[0], list) or item[0] is None): # output_images
                     output_images += item[0] if item[0] is not None else []
-                    output_processed += [item[1]] if item[1] is not None else []
+                    # The final yield is a 4-tuple (outputs, blended_image, html, filename)
+                    # that re-emits the SAME blended_image already yielded by the
+                    # preprocess step. Only count maps on the 3-tuple preprocess yields,
+                    # otherwise `processed` would contain the same control map twice.
+                    if len(item) < 4:
+                        output_processed += [item[1]] if item[1] is not None else []
                     output_info += item[2] if len(item) > 2 and item[2] is not None else ''
                 elif isinstance(item, str):
                     output_info += item
