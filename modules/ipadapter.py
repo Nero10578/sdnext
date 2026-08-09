@@ -58,15 +58,16 @@ ADAPTERS = { **ADAPTERS_SD15, **ADAPTERS_SDXL, **ADAPTERS_SD3, **ADAPTERS_F1 }
 ADAPTERS_ALL = { **ADAPTERS_SD15, **ADAPTERS_SDXL, **ADAPTERS_SD3, **ADAPTERS_F1 }
 
 
-def get_adapters():
+def get_adapters(model_type: str | None = None):
     global ADAPTERS # pylint: disable=global-statement
-    if shared.sd_model_type == 'sd':
+    model_type = model_type or shared.sd_model_type
+    if model_type == 'sd':
         ADAPTERS = ADAPTERS_SD15
-    elif shared.sd_model_type == 'sdxl':
+    elif model_type == 'sdxl':
         ADAPTERS = ADAPTERS_SDXL
-    elif shared.sd_model_type == 'sd3':
+    elif model_type == 'sd3':
         ADAPTERS = ADAPTERS_SD3
-    elif shared.sd_model_type == 'f1':
+    elif model_type == 'f1':
         ADAPTERS = ADAPTERS_F1
     else:
         ADAPTERS = ADAPTERS_NONE

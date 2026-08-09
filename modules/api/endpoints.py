@@ -65,13 +65,16 @@ def get_detailers():
 
 get_restorers = get_detailers  # legacy alias for /sdapi/v1/face-restorers
 
-def get_ip_adapters():
+def get_ip_adapters(model: str | None = None):
     """
     List available IP-Adapter models.
-    Returns adapter names that can be used for image-prompt conditioning during generation.
+
+    The optional ``model`` query param carries the checkpoint the caller has
+    selected; the returned list is resolved from that checkpoint's base
+    architecture (instead of whatever checkpoint happens to be loaded).
     """
     from modules import ipadapter
-    return ipadapter.get_adapters()
+    return ipadapter.get_adapters(model_type=resolve_model_type(model))
 
 def get_prompt_styles():
     """List all saved prompt styles with their prompt, negative prompt, and preview."""
@@ -444,16 +447,58 @@ def post_pnginfo(req: models.ReqImageInfo):
     script_callbacks.infotext_pasted_callback(geninfo, params)
     return models.ResImageInfo(info=geninfo, items=items, parameters=params)
 
-def get_control_models(unit_type: str = "controlnet"):
+def resolve_model_type(name: str | None) -> str | None:
+    """Resolve a checkpoint name to its base-architecture code ('sd', 'sdxl', 'f1', ...)
+    by reading the checkpoint's files, without loading it into memory.
+
+    Returns None when the name can't be resolved or the architecture can't be
+    determined, so callers fall back to the currently loaded model's type.
+    """
+    if not name:
+        return None
+    name = name.replace('(TRIAL) ', '')
+    if name in ('None', ''):
+        return None
+    try:
+        from modules import sd_checkpoint, sd_detect, shared_items, modeldata
+        info = sd_checkpoint.get_closest_checkpoint_match(name)
+        if info is None:
+            return None
+        _, guess = sd_detect.detect_pipeline(info.path, op='model')
+        if not guess:
+            return None
+        pipeline = shared_items.get_pipelines().get(guess, None)
+        if pipeline is None:
+            return None
+        # Reuse the same class-name-based mapping the loaded-model property uses
+        # (modeldata.get_model_type) without loading the model by manufacturing a
+        # dummy instance whose class carries the detected pipeline class name.
+        dummy = type(pipeline.__name__, (object,), {})()
+        model_type = modeldata.get_model_type(dummy)
+        if model_type in ('unknown', 'none', 'ldm'):
+            return None
+        return model_type
+    except Exception as e:
+        log.error(f'Control resolve model type: name="{name}" {e}')
+        return None
+
+
+def get_control_models(unit_type: str = "controlnet", model: str | None = None):
     """
     List available models for a control unit type.
 
     Returns model names for the specified ``unit_type``: ``controlnet`` (default),
     ``t2i`` / ``t2i adapter``, ``xs``, ``lite``, or ``reference``.
+
+    The optional ``model`` query param carries the checkpoint the caller has
+    selected; the returned catalog is resolved from *that* checkpoint's base
+    architecture instead of whatever checkpoint happens to be loaded, so the
+    list matches the model the user actually picked.
     """
+    model_type = resolve_model_type(model)
     if unit_type == "controlnet":
         from modules.control.units.controlnet import api_list_models
-        return api_list_models()
+        return api_list_models(model_type=model_type)
     if unit_type in ("t2i", "t2i adapter"):
         from modules.control.units.t2iadapter import list_models
         result = list_models()
