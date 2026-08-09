@@ -251,18 +251,6 @@ class APIControl:
         # StableDiffusionProcessingControl constructor, which switches the loaded
         # checkpoint the same way txt2img/img2img do (select_checkpoint + reload).
 
-        # Fail loudly instead of silently generating without control guidance
-        # (which yields black/dark output when the unit's model failed to load).
-        for u in req.units:
-            if not u.enabled or u.type not in ('controlnet', 'xs', 'lite', 't2i adapter'):
-                continue
-            model_id = u.model_id
-            if not model_id or model_id in ('None', ''):
-                continue
-            holder = u.adapter if u.type == 't2i adapter' else u.controlnet
-            if holder is None or holder.model is None:
-                raise HTTPException(status_code=400, detail=f'Control model could not be loaded: "{model_id}". Check the SDNext log for the underlying load error (unknown model id or download/load failure) or pick another model.')
-
         # Merge init_control images into inits
         init_control = getattr(req, "init_control", None)
         decoded_inits = [helpers.decode_base64_to_image(x) for x in req.inits] if req.inits else None
@@ -303,6 +291,20 @@ class APIControl:
                 if val is not None:
                     extra_p_args[field] = val
             run.control_set(extra_p_args)
+            # Attempt to load the requested control model(s) up front, then fail
+            # loudly instead of silently generating without control guidance (which
+            # yields black/dark output when a unit's model failed to load). The load
+            # is idempotent: control_run()'s own init_units() no-ops on cached ids.
+            run.init_units(req.units)
+            for u in req.units:
+                if not u.enabled or u.type not in ('controlnet', 'xs', 'lite', 't2i adapter'):
+                    continue
+                model_id = u.model_id
+                if not model_id or model_id in ('None', ''):
+                    continue
+                holder = u.adapter if u.type == 't2i adapter' else u.controlnet
+                if holder is None or holder.model is None:
+                    raise HTTPException(status_code=400, detail=f'Control model could not be loaded: "{model_id}". Check the SDNext log for the underlying load error (unknown model id or download/load failure) or pick another model.')
             # run
             res = run.control_run(**args)
             for item in res:
