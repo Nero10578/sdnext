@@ -516,24 +516,29 @@ def get_control_models(unit_type: str = "controlnet", model: str | None = None):
         return list_models()
     return []
 
-def get_control_modes():
+def get_control_modes(model: str | None = None):
     """
     List mode choices for control models that support modes.
 
     Returns a mapping of model name to available mode choices (e.g., canny, depth, pose).
-    Only models with non-default mode options are included.
+    Only models with non-default mode options are included. The optional ``model``
+    query param carries the checkpoint the caller has selected: the returned modes
+    are restricted to that checkpoint's base architecture, matching the model catalog
+    served by /sdapi/v1/control-models for the same selection.
     """
     from modules.control.unit import Unit
+    from modules.control.units import controlnet
     u = Unit.__new__(Unit)
     u.model_name = None
     u.choices = ['default']
-    from modules.control.units import controlnet
     result = {}
-    for models_dict in [controlnet.predefined_sd15, controlnet.predefined_sdxl, controlnet.predefined_f1, controlnet.predefined_sd3, getattr(controlnet, 'predefined_qwen', {})]:
-        for name in models_dict:
-            u.update_choices(name)
-            if u.choices != ['default']:
-                result[name] = list(u.choices)
+    # Reuse the same authoritative per-arch catalog as /control-models (bundled
+    # predefines for the resolved arch + locally downloaded models) so the mode
+    # choices always line up with the control models actually offered.
+    for name in controlnet.api_list_models(model_type=resolve_model_type(model)):
+        u.update_choices(name)
+        if u.choices != ['default']:
+            result[name] = list(u.choices)
     return result
 
 def get_latent_history():
