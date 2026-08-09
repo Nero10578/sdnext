@@ -1,5 +1,7 @@
 from enum import Enum
 import sys
+import threading
+import functools
 import time
 import copy
 import inspect
@@ -1476,6 +1478,23 @@ def reload_text_encoder(initial=False):
     apply_balanced_offload(shared.sd_model)
 
 
+# Serializes checkpoint switches. Without it, concurrent requests (e.g. a
+# control request and a txt2img request, each switching to a different
+# checkpoint) interleave unload/load: one can apply balanced offload to a
+# pipeline that another is mid-way through unloading (modules moved to meta),
+# producing "Cannot copy out of meta tensor" / missing-_hf_hook crashes.
+reload_lock = threading.RLock()
+
+
+def _with_reload_lock(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with reload_lock:
+            return func(*args, **kwargs)
+    return wrapper
+
+
+@_with_reload_lock
 def reload_model_weights(sd_model=None, info: CheckpointInfo | None = None, op='model', force=False, revision=None):
     global loaded_te # pylint: disable=global-statement
     checkpoint_info = info or select_checkpoint(op=op) # are we selecting model or dictionary
@@ -1553,6 +1572,7 @@ def clear_caches(full: bool = False):
         sd_offload.offload_hook_instance = None
 
 
+@_with_reload_lock
 def unload_model_weights(op='model'):
     fn = f'{sys._getframe(2).f_code.co_name}:{sys._getframe(1).f_code.co_name}' # pylint: disable=protected-access
     clear_caches(full=True)

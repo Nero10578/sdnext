@@ -473,6 +473,14 @@ def apply_balanced_offload_to_module(module, op="apply", force:bool=False):
     network_layer_name = getattr(module, "network_layer_name", None)
     device_map = getattr(module, "balanced_offload_device_map", None)
     max_memory = getattr(module, "balanced_offload_max_memory", None)
+    # Skip modules that are not on a real device. This happens when a concurrent
+    # checkpoint switch is unloading the same pipeline (modules moved to meta),
+    # or when the module was never materialized; offloading them is meaningless
+    # and the unguarded _hf_hook access below would hard-crash the request.
+    module_device = getattr(module, "device", None)
+    if module_device is not None and getattr(module_device, "type", None) == "meta":
+        log.warning(f'Offload skip: module={module_name} on meta device')
+        return
     try:
         module = accelerate.hooks.remove_hook_from_module(module, recurse=True)
     except Exception as e:
@@ -482,7 +490,11 @@ def apply_balanced_offload_to_module(module, op="apply", force:bool=False):
         module = accelerate.hooks.add_hook_to_module(module, offload_hook_instance, append=True)
     except Exception as e:
         log.warning(f'Offload add hook: module={module_name} {e}')
-    module._hf_hook.execution_device = torch.device(devices.device) # pylint: disable=protected-access
+    hook = getattr(module, '_hf_hook', None)
+    if hook is None:
+        log.warning(f'Offload hook not available: module={module_name} - skipping execution_device')
+    else:
+        hook.execution_device = torch.device(devices.device) # pylint: disable=protected-access
     if network_layer_name:
         module.network_layer_name = network_layer_name
     if device_map and max_memory:
