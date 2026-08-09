@@ -96,6 +96,29 @@ def upscaler_to_index(name: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid upscaler, needs to be one of these: {' , '.join([x.name for x in shared.sd_upscalers])}") from e
 
+def _parameters_to_exif(parameters):
+    """Build an EXIF UserComment holding the generation infotext.
+
+    JPEG EXIF lives in a single APP1 segment capped at ~64KB and the UserComment
+    is encoded as UTF-16 (2 bytes per character), so long infotexts (controlnet
+    runs, long prompts, detailer metadata) overflow it and PIL raises
+    "EXIF data is too long". Truncate the text until the encoded comment fits
+    with headroom for the EXIF IFD overhead; return None when it cannot be
+    built so the caller can save without metadata.
+    """
+    text = parameters or ''
+    max_bytes = 60000  # APP1 allows 65533 bytes; leave headroom for IFD/Exif overhead
+    try:
+        comment = piexif.helper.UserComment.dump(text, encoding="unicode")
+        while len(comment) > max_bytes and len(text) > 1:
+            text = text[: len(text) // 2]
+            comment = piexif.helper.UserComment.dump(text, encoding="unicode")
+        return piexif.dump({"Exif": {piexif.ExifIFD.UserComment: comment}})
+    except Exception as e:
+        log.warning(f'Save: cannot embed metadata in exif: {e}')
+        return None
+
+
 def save_image(image, fn, ext):
     # actual save
     parameters = image.info.get('parameters', None)
@@ -113,20 +136,41 @@ def save_image(image, fn, ext):
             image = image.point(lambda p: p * 0.0038910505836576).convert("L")
         elif image.mode == 'P':
             image = image.convert("RGB")
-        exif_bytes = piexif.dump({ "Exif": { piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(parameters or "", encoding="unicode") } })
-        image.save(fn, format=image_format, quality=shared.opts.jpeg_quality, exif=exif_bytes)
+        exif_bytes = _parameters_to_exif(parameters)
+        try:
+            image.save(fn, format=image_format, quality=shared.opts.jpeg_quality, exif=exif_bytes)
+        except Exception as e:
+            log.warning(f'Save: JPEG with metadata failed ({e}) - retrying without metadata')
+            if hasattr(fn, 'seek') and hasattr(fn, 'truncate'):
+                fn.seek(0)
+                fn.truncate()
+            image.save(fn, format=image_format, quality=shared.opts.jpeg_quality)
     elif image_format == 'WEBP':
         if image.mode == 'I;16':
             image = image.point(lambda p: p * 0.0038910505836576).convert("RGB")
-        exif_bytes = piexif.dump({ "Exif": { piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(parameters or "", encoding="unicode") } })
-        image.save(fn, format=image_format, quality=shared.opts.jpeg_quality, lossless=shared.opts.webp_lossless, exif=exif_bytes)
+        exif_bytes = _parameters_to_exif(parameters)
+        try:
+            image.save(fn, format=image_format, quality=shared.opts.jpeg_quality, lossless=shared.opts.webp_lossless, exif=exif_bytes)
+        except Exception as e:
+            log.warning(f'Save: WEBP with metadata failed ({e}) - retrying without metadata')
+            if hasattr(fn, 'seek') and hasattr(fn, 'truncate'):
+                fn.seek(0)
+                fn.truncate()
+            image.save(fn, format=image_format, quality=shared.opts.jpeg_quality, lossless=shared.opts.webp_lossless)
     elif image_format == 'JXL':
         if image.mode == 'I;16':
             image = image.point(lambda p: p * 0.0038910505836576).convert("RGB")
         elif image.mode not in {"RGB", "RGBA"}:
             image = image.convert("RGBA")
-        exif_bytes = piexif.dump({ "Exif": { piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(parameters or "", encoding="unicode") } })
-        image.save(fn, format=image_format, quality=shared.opts.jpeg_quality, lossless=shared.opts.webp_lossless, exif=exif_bytes)
+        exif_bytes = _parameters_to_exif(parameters)
+        try:
+            image.save(fn, format=image_format, quality=shared.opts.jpeg_quality, lossless=shared.opts.webp_lossless, exif=exif_bytes)
+        except Exception as e:
+            log.warning(f'Save: JXL with metadata failed ({e}) - retrying without metadata')
+            if hasattr(fn, 'seek') and hasattr(fn, 'truncate'):
+                fn.seek(0)
+                fn.truncate()
+            image.save(fn, format=image_format, quality=shared.opts.jpeg_quality, lossless=shared.opts.webp_lossless)
     else:
         # log.warning(f'Unrecognized image format: {extension} attempting save as {image_format}')
         image.save(fn, format=image_format, quality=shared.opts.jpeg_quality)
