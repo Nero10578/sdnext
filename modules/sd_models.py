@@ -1297,7 +1297,7 @@ def restore_pipe_components(pipe, components):
         pipe.task_args = components['task_args']
     if components['hijack_prompt']:
         sd_hijack_te.init_hijack(pipe)
-    if components['hijack_vae']:
+    if components['hijack_vae'] or hasattr(pipe, 'vae'):
         sd_hijack_vae.init_hijack(pipe)
 
     if pipe.__class__.__name__ in ['FluxPipeline', 'StableDiffusion3Pipeline']:
